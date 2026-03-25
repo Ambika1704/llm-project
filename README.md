@@ -1,9 +1,9 @@
 # AI Study Assistant
 
-![App Screenshot 4](./public/screenshot4.png)
 ![App Screenshot 1](./public/screenshot.png)
 ![App Screenshot 2](./public/screenshot2.png)
 ![App Screenshot 3](./public/screenshot3.png)
+![App Screenshot 4](./public/screenshot4.png)
 
 This is a modern web application built with [Next.js](https://nextjs.org/), React 19, Tailwind CSS, and Radix UI components, designed to act as an intelligent, responsive study companion.
 
