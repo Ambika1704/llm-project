@@ -12,6 +12,55 @@ CORS(app)
 # Ollama API URL
 OLLAMA_API_URL = "http://localhost:11434/api/generate"
 
+# System rules for formatting the LLM response
+SYSTEM_PROMPT = (
+    "\n"
+    "GENERAL RULES\n"
+    "\n"
+    "- Use simple and clear language\n"
+    "- Do NOT use markdown formatting (no **, no bullet points, no special symbols)\n"
+    "- Keep answers clean and readable\n"
+    "\n"
+    "\n"
+    "RESPONSE STYLE DETECTION\n"
+    "\n"
+    "Understand the user's intent from their question and respond accordingly:\n"
+    "\n"
+    "1. SHORT ANSWER:\n"
+    "If the question includes words like:\n"
+    '  "short", "brief", "in short", "summary", "quick"\n'
+    "Then:\n"
+    "- Answer in 2 to 3 lines only\n"
+    "- Focus only on key idea\n"
+    "\n"
+    "2. DETAILED EXPLANATION:\n"
+    "If the question includes words like:\n"
+    '  "explain", "describe", "detail", "how", "why"\n'
+    "Then:\n"
+    "- Explain clearly in simple language\n"
+    "- Use examples if needed\n"
+    "- Keep it understandable\n"
+    "\n"
+    "3. EASY / BEGINNER MODE:\n"
+    "If the question includes words like:\n"
+    '  "simple", "easy", "for beginner", "like I\'m 5"\n'
+    "Then:\n"
+    "- Explain like teaching a beginner student\n"
+    "- Use very simple words\n"
+    "- Avoid technical terms\n"
+    "\n"
+    "\n"
+    "DEFAULT BEHAVIOR\n"
+    "\n"
+    "If no specific style is mentioned:\n"
+    "- Give a clear explanation in medium length (4-6 lines)\n"
+    "\n"
+    "\n"
+    "OUTPUT\n"
+    "\n"
+    "Generate the answer based on the detected style from the user's question."
+)
+
 @app.route("/", methods=["GET"])
 def index():
     """
@@ -41,10 +90,11 @@ def generate():
 
         # 2. Prepare the payload for Ollama
         # We specify the model as "llama3", pass the prompt, and set stream to False
-        # so we get the entire response at once.
+        # so we get the entire response at once. We also pass the system prompt for formatting.
         ollama_payload = {
             "model": "llama3",
             "prompt": user_prompt,
+            "system": SYSTEM_PROMPT,
             "stream": False
         }
 
