@@ -15,6 +15,7 @@ export default function Home() {
   const [input, setInput] = useState('')
   const [messages, setMessages] = useState<Message[]>([])
   const [loading, setLoading] = useState(false)
+  const [selectedModel, setSelectedModel] = useState<'local' | 'gemini'>('local')
 
   const [titleText, setTitleText] = useState('')
   const [subtitleText, setSubtitleText] = useState('')
@@ -60,7 +61,7 @@ export default function Home() {
       const res = await fetch('http://127.0.0.1:5000/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: userMessage }),
+        body: JSON.stringify({ prompt: userMessage, model: selectedModel }),
       })
       const data = await res.json()
       if (data.error) {
@@ -117,6 +118,20 @@ export default function Home() {
         {/* Input Section */}
         <Card className="mb-8 shadow-lg border-border/50 relative">
           <form onSubmit={handleSubmit} className="p-4 sm:p-6">
+            <div className="mb-4 flex justify-end items-center space-x-3">
+              <label htmlFor="model-select" className="text-sm font-semibold text-muted-foreground">AI Engine:</label>
+              <select
+                id="model-select"
+                value={selectedModel}
+                onChange={(e) => setSelectedModel(e.target.value as 'local' | 'gemini')}
+                className="bg-card border border-border text-foreground rounded-md px-3 py-1.5 text-sm font-medium outline-none focus:ring-2 focus:ring-primary shadow-sm cursor-pointer transition-colors"
+                disabled={loading}
+              >
+                <option value="local">Local LLM (Ollama)</option>
+                <option value="gemini">Gemini API (Cloud)</option>
+              </select>
+            </div>
+            
             <Textarea
               placeholder="Ask a question or enter text to summarize..."
               value={input}

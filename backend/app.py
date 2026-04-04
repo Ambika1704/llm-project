@@ -1,6 +1,12 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import requests
+import os
+import google.generativeai as genai
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Initialize the Flask application
 app = Flask(__name__)
@@ -87,6 +93,23 @@ def generate():
             return jsonify({"error": "Missing 'prompt' in request body"}), 400
             
         user_prompt = data["prompt"]
+        req_model = data.get("model", "local")
+
+        if req_model == "gemini":
+            if not os.getenv("GEMINI_API_KEY"):
+                return jsonify({"error": "Gemini API key is missing. Please set the GEMINI_API_KEY environment variable."}), 400
+            
+            try:
+                genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+                model = genai.GenerativeModel('gemini-2.5-flash', system_instruction=SYSTEM_PROMPT)
+                
+                response = model.generate_content(user_prompt)
+                
+                generated_text = response.text
+                return jsonify({"response": generated_text})
+                
+            except Exception as e:
+                return jsonify({"error": f"Gemini API request failed: {str(e)}"}), 500
 
         # 2. Prepare the payload for Ollama
         # We specify the model as "llama3", pass the prompt, and set stream to False
