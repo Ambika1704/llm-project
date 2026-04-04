@@ -16,6 +16,8 @@ export default function Home() {
   const [messages, setMessages] = useState<Message[]>([])
   const [loading, setLoading] = useState(false)
   const [selectedModel, setSelectedModel] = useState<'local' | 'gemini'>('local')
+  const [feature, setFeature] = useState<'chat' | 'notes' | 'summarize'>('chat')
+  const [file, setFile] = useState<File | null>(null)
 
   const [titleText, setTitleText] = useState('')
   const [subtitleText, setSubtitleText] = useState('')
@@ -53,15 +55,29 @@ export default function Home() {
 
     const userMessage = input.trim()
     setInput('')
-    setMessages(prev => [...prev, { role: 'user', content: userMessage }])
+    setMessages(prev => [...prev, { role: 'user', content: userMessage + (file ? `\n[Attached File: ${file.name}]` : '') }])
 
     setLoading(true)
     try {
+      let bodyData;
+      let headers: HeadersInit = {};
+
+      if (file) {
+        bodyData = new FormData()
+        bodyData.append('prompt', userMessage)
+        bodyData.append('model', selectedModel)
+        bodyData.append('feature', feature)
+        bodyData.append('file', file)
+      } else {
+        bodyData = JSON.stringify({ prompt: userMessage, model: selectedModel, feature: feature })
+        headers = { 'Content-Type': 'application/json' }
+      }
+
       // Connect to the new Python Flask backend
       const res = await fetch('http://127.0.0.1:5000/generate', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: userMessage, model: selectedModel }),
+        headers: headers,
+        body: bodyData,
       })
       const data = await res.json()
       if (data.error) {
@@ -69,6 +85,7 @@ export default function Home() {
       } else {
         setMessages(prev => [...prev, { role: 'assistant', content: data.response }])
       }
+      setFile(null)
     } catch (error) {
       setMessages(prev => [...prev, { role: 'assistant', content: 'Error connecting to the backend. Ensure Flask is running on port 5000.' }])
     }
@@ -116,6 +133,31 @@ export default function Home() {
         )}
 
         {/* Input Section */}
+        
+        <div className="flex justify-center space-x-2 mb-4">
+          <Button 
+            variant={feature === 'chat' ? 'default' : 'outline'} 
+            onClick={() => setFeature('chat')}
+            className={feature === 'chat' ? 'bg-primary text-primary-foreground' : ''}
+          >
+            Chat
+          </Button>
+          <Button 
+            variant={feature === 'notes' ? 'default' : 'outline'} 
+            onClick={() => setFeature('notes')}
+            className={feature === 'notes' ? 'bg-primary text-primary-foreground' : ''}
+          >
+            Notes Generator
+          </Button>
+          <Button 
+            variant={feature === 'summarize' ? 'default' : 'outline'} 
+            onClick={() => setFeature('summarize')}
+            className={feature === 'summarize' ? 'bg-primary text-primary-foreground' : ''}
+          >
+            Summarize
+          </Button>
+        </div>
+
         <Card className="mb-8 shadow-lg border-border/50 relative">
           <form onSubmit={handleSubmit} className="p-4 sm:p-6">
             <div className="mb-4 flex justify-end items-center space-x-3">
@@ -133,10 +175,10 @@ export default function Home() {
             </div>
             
             <Textarea
-              placeholder="Ask a question or enter text to summarize..."
+              placeholder={feature === 'notes' ? "Ask a question or upload a PDF to generate notes..." : (feature === 'summarize' ? "Ask a question or upload a PDF to summarize..." : "Ask a question or upload a PDF to chat...")}
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              className="min-h-[100px] resize-none pb-14 text-foreground placeholder:text-muted-foreground"
+              className="min-h-[100px] resize-none pb-14 text-foreground placeholder:text-muted-foreground mb-2"
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault()
@@ -144,6 +186,18 @@ export default function Home() {
                 }
               }}
             />
+            
+            <div className="flex items-center absolute bottom-6 left-4 sm:bottom-8 sm:left-6">
+              <input 
+                type="file" 
+                accept="application/pdf"
+                onChange={(e) => setFile(e.target.files?.[0] || null)}
+                className="text-sm w-48 sm:w-auto file:mr-4 file:py-1 file:px-3 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20"
+                disabled={loading}
+              />
+              {file && <span className="text-xs text-muted-foreground ml-2">({(file.size / 1024 / 1024).toFixed(2)} MB)</span>}
+            </div>
+
             <Button
               type="submit"
               disabled={loading || !input.trim()}

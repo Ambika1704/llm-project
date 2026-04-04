@@ -3,6 +3,8 @@ from flask_cors import CORS
 import requests
 import os
 import google.generativeai as genai
+import pypdf
+from io import BytesIO
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
@@ -85,15 +87,56 @@ def generate():
     It DOES NOT train a model from scratch, but utilizes the already capable pre-trained model.
     """
     try:
-        # 1. Parse the incoming JSON from the frontend request
-        data = request.get_json()
-        
-        # Verify that prompt was provided
-        if not data or "prompt" not in data:
-            return jsonify({"error": "Missing 'prompt' in request body"}), 400
-            
-        user_prompt = data["prompt"]
+        if request.is_json:
+            data = request.get_json()
+        else:
+            data = request.form
+
+        user_prompt = data.get("prompt", "")
         req_model = data.get("model", "local")
+        feature = data.get("feature", "chat")
+
+        # Handle PDF Upload
+        if not request.is_json and "file" in request.files:
+            file = request.files["file"]
+            if file.filename != '':
+                file_bytes = file.read()
+                if len(file_bytes) > 5 * 1024 * 1024:
+                    return jsonify({"error": "File size exceeds 5MB limit."}), 400
+                try:
+                    reader = pypdf.PdfReader(BytesIO(file_bytes))
+                    extracted_text = ""
+                    for page in reader.pages:
+                        extracted_text += page.extract_text() + "\n"
+                    
+                    # Truncate to reasonable limits to avoid context explosions
+                    extracted_text = extracted_text[:30000]
+                    user_prompt = f"Background Document Content:\n{extracted_text}\n\nUser Question/Request:\n{user_prompt}"
+                except Exception as e:
+                    return jsonify({"error": f"Failed to parse PDF: {str(e)}"}), 400
+
+        if not user_prompt:
+            return jsonify({"error": "Missing 'prompt' or document context"}), 400
+
+        # System Prompt Routing for Study Modes
+        if feature == "notes":
+            active_system_prompt = (
+                "You are an AI Study Assistant.\n"
+                "Convert the provided text/conversation into structured study material.\n"
+                "Output format:\n"
+                "1. Detailed Notes: clear and well-explained notes. Cover all important concepts using examples.\n"
+                "2. Bullet Points: key points in short and crisp format. Focus on important facts only.\n"
+                "3. Short Summary: very concise summary (2-4 lines).\n"
+                "Instructions: Keep language simple and easy to understand (student-friendly). Organize clearly with headings."
+            )
+        elif feature == "summarize":
+            active_system_prompt = (
+                "You are an AI Text Summarizer.\n"
+                "Provide a precise, well-structured summary of the text provided by the user. "
+                "Focus purely on the main ideas and crucial details. Avoid conversational filler."
+            )
+        else:
+            active_system_prompt = SYSTEM_PROMPT
 
         if req_model == "gemini":
             if not os.getenv("GEMINI_API_KEY"):
@@ -101,34 +144,25 @@ def generate():
             
             try:
                 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-                model = genai.GenerativeModel('gemini-2.5-flash', system_instruction=SYSTEM_PROMPT)
-                
+                model = genai.GenerativeModel('gemini-2.5-flash', system_instruction=active_system_prompt)
                 response = model.generate_content(user_prompt)
-                
-                generated_text = response.text
-                return jsonify({"response": generated_text})
-                
+                return jsonify({"response": response.text})
             except Exception as e:
                 return jsonify({"error": f"Gemini API request failed: {str(e)}"}), 500
 
         # 2. Prepare the payload for Ollama
-        # We specify the model as "llama3", pass the prompt, and set stream to False
-        # so we get the entire response at once. We also pass the system prompt for formatting.
         ollama_payload = {
             "model": "llama3",
             "prompt": user_prompt,
-            "system": SYSTEM_PROMPT,
+            "system": active_system_prompt,
             "stream": False
         }
 
         # 3. Forward the request to Ollama
         try:
-            # We increase the timeout to 300 seconds (5 minutes) because 
-            # local LLMs can sometimes take a while to generate text, especially on CPUs.
             response = requests.post(OLLAMA_API_URL, json=ollama_payload, timeout=300)
-            response.raise_for_status() # Raise an exception for HTTP errors
+            response.raise_for_status() 
         except requests.exceptions.ConnectionError:
-            # Handle cases where Ollama is not running
             return jsonify({
                 "error": "Failed to connect to Ollama. Please ensure the Ollama application is running locally."
             }), 503
